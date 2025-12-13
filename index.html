@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>因式勇者：魔界大冒險</title>
+    
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 載入 React 和 ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- 載入 Babel 用於解析 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- 解決行動裝置點擊延遲與樣式 -->
+    <style>
+        body {
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+        .pop-in {
+            animation: popIn 0.3s ease-out;
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- 圖示組件 (Inline SVGs) ---
+        const IconHeart = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+        );
+        const IconShield = ({ className, size=24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+        );
+        const IconZap = ({ className, size=24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        );
+        const IconTrophy = ({ size=24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+        );
+        const IconArrowRight = ({ size=24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        );
+
+        // --- 遊戲邏輯 ---
+
+        // 生成隨機整數 [min, max]
+        const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+        // 題目生成核心邏輯
+        const generateProblem = (level) => {
+            let type = 'common'; // common, cross_simple, cross_hard, square
+            if (level > 3) type = 'cross_simple';
+            if (level > 7) type = 'cross_hard';
+            if (level > 12 && Math.random() > 0.7) type = 'square'; 
+
+            let question = '';
+            let correctFactors = [];
+            let displayExp = '';
+
+            // 1. 提公因式: k(ax + b)
+            if (type === 'common') {
+                const k = randomInt(2, 5);
+                const a = randomInt(1, 3);
+                const b = randomInt(1, 5) * (Math.random() > 0.5 ? 1 : -1);
+                
+                // 展開: k*a*x + k*b
+                const term1 = k * a === 1 ? 'x' : `${k * a}x`;
+                const term2 = k * b > 0 ? `+ ${k * b}` : `- ${Math.abs(k * b)}`;
+                
+                displayExp = `${term1} ${term2}`;
+                correctFactors = [k.toString(), (a === 1 ? `x` : `${a}x`) + (b > 0 ? `+${b}` : b)];
+            } 
+            // 2. 十字交乘 (係數1): (x + a)(x + b)
+            else if (type === 'cross_simple') {
+                const a = randomInt(1, 6) * (Math.random() > 0.5 ? 1 : -1);
+                const b = randomInt(1, 6) * (Math.random() > 0.5 ? 1 : -1);
+                
+                // x^2 + (a+b)x + ab
+                const sum = a + b;
+                const product = a * b;
+                
+                let midTerm = '';
+                if (sum === 0) midTerm = ''; 
+                else if (sum === 1) midTerm = '+ x';
+                else if (sum === -1) midTerm = '- x';
+                else midTerm = sum > 0 ? `+ ${sum}x` : `- ${Math.abs(sum)}x`;
+
+                const lastTerm = product > 0 ? `+ ${product}` : `- ${Math.abs(product)}`;
+                
+                displayExp = `x² ${midTerm} ${lastTerm}`;
+                correctFactors = [`x${a > 0 ? '+' + a : a}`, `x${b > 0 ? '+' + b : b}`];
+            }
+            // 3. 進階十字交乘: (ax + b)(cx + d)
+            else {
+                const a = randomInt(1, 3);
+                const c = randomInt(1, 2);
+                const b = randomInt(1, 5) * (Math.random() > 0.5 ? 1 : -1);
+                const d = randomInt(1, 5) * (Math.random() > 0.5 ? 1 : -1);
+
+                // acx^2 + (ad+bc)x + bd
+                const A = a * c;
+                const B = a * d + b * c;
+                const C = b * d;
+
+                const term1 = A === 1 ? 'x²' : `${A}x²`;
+                
+                let term2 = '';
+                if (B === 0) term2 = '';
+                else if (B === 1) term2 = '+ x';
+                else if (B === -1) term2 = '- x';
+                else term2 = B > 0 ? `+ ${B}x` : `- ${Math.abs(B)}x`;
+
+                const term3 = C > 0 ? `+ ${C}` : `- ${Math.abs(C)}`;
+
+                displayExp = `${term1} ${term2} ${term3}`;
+                correctFactors = [
+                `${a === 1 ? 'x' : a + 'x'}${b > 0 ? '+' + b : b}`,
+                `${c === 1 ? 'x' : c + 'x'}${d > 0 ? '+' + d : d}`
+                ];
+            }
+
+            // 生成選項
+            const targetAnswer = correctFactors[Math.floor(Math.random() * correctFactors.length)];
+            
+            const generateWrong = () => {
+                const base = targetAnswer;
+                if (!isNaN(base)) return (parseInt(base) + randomInt(1,3)).toString(); 
+                
+                let wrong = base;
+                if (base.includes('+')) wrong = base.replace('+', '-');
+                else if (base.includes('-')) wrong = base.replace('-', '+');
+                else wrong = base + '+1';
+                
+                if (Math.random() > 0.5) {
+                    const parts = wrong.match(/[+-]?\d+$/);
+                    if(parts) {
+                        const num = parseInt(parts[0]);
+                        const newNum = num + (Math.random() > 0.5 ? 1 : -1);
+                        wrong = wrong.replace(/[+-]?\d+$/, newNum > 0 ? `+${newNum}` : newNum);
+                    }
+                }
+                return wrong;
+            };
+
+            const options = new Set();
+            options.add(targetAnswer);
+            while (options.size < 4) {
+                let wrong = generateWrong();
+                if (wrong !== targetAnswer && !correctFactors.includes(wrong)) {
+                    options.add(wrong);
+                }
+            }
+
+            return {
+                id: Date.now(),
+                displayExp: displayExp.replace(/\s+/g, ''),
+                targetAnswer,
+                allCorrect: correctFactors,
+                options: Array.from(options).sort(() => Math.random() - 0.5),
+                monsterHp: level > 5 ? 2 : 1,
+                monsterEmoji: ['👾', '👹', '👻', '🤖', '🦖', '🦇'][randomInt(0, 5)]
+            };
+        };
+
+        // --- 主程式 ---
+
+        function FactorHero() {
+            const [gameState, setGameState] = useState('MENU');
+            const [level, setLevel] = useState(1);
+            const [score, setScore] = useState(0);
+            const [hp, setHp] = useState(100);
+            const [maxHp, setMaxHp] = useState(100);
+            const [potions, setPotions] = useState(1);
+            
+            const [currentProblem, setCurrentProblem] = useState(null);
+            const [feedback, setFeedback] = useState('');
+            const [shake, setShake] = useState(false);
+            const [attackAnim, setAttackAnim] = useState(false);
+
+            const startGame = () => {
+                setLevel(1);
+                setScore(0);
+                setHp(100);
+                setMaxHp(100);
+                setPotions(1);
+                setGameState('PLAYING');
+                nextLevel(1);
+            };
+
+            const nextLevel = (lvl) => {
+                const p = generateProblem(lvl);
+                setCurrentProblem(p);
+                setFeedback('魔物出現了！找出它的因式弱點！');
+            };
+
+            const handleAttack = (selectedOption) => {
+                if (!currentProblem) return;
+
+                const isCorrect = currentProblem.allCorrect.includes(selectedOption);
+
+                if (isCorrect) {
+                    // 攻擊成功
+                    setAttackAnim(true);
+                    setTimeout(() => setAttackAnim(false), 500);
+                    
+                    const goldGain = 10 + Math.floor(level * 1.5);
+                    setScore(prev => prev + goldGain);
+                    setFeedback(`會心一擊！對魔物造成 9999 點傷害！獲得 ${goldGain} 金幣。`);
+                    
+                    setTimeout(() => {
+                        const nextLvl = level + 1;
+                        setLevel(nextLvl);
+                        if (nextLvl % 5 === 0) {
+                            setFeedback('魔物掉落了稀有寶箱...');
+                            setTimeout(() => setGameState('SHOP'), 1000);
+                        } else {
+                            nextLevel(nextLvl);
+                        }
+                    }, 1000);
+
+                } else {
+                    // 攻擊失敗
+                    setShake(true);
+                    setTimeout(() => setShake(false), 500);
+                    
+                    const damage = 20 + Math.floor(level * 2);
+                    const newHp = hp - damage;
+                    setHp(newHp);
+                    
+                    const taunts = [
+                        "魔物：「算錯了吧！哈哈！」",
+                        "魔物：「你的符號沒變號喔！」",
+                        "魔物：「十字交乘再練練吧！」",
+                        "受到重擊！痛啊！"
+                    ];
+                    setFeedback(`${taunts[randomInt(0, 3)]} (HP -${damage})`);
+
+                    if (newHp <= 0) {
+                        setTimeout(() => setGameState('GAMEOVER'), 1000);
+                    }
+                }
+            };
+
+            const usePotion = () => {
+                if (potions > 0 && hp < maxHp) {
+                    setPotions(prev => prev - 1);
+                    setHp(prev => Math.min(prev + 50, maxHp));
+                    setFeedback('咕嚕咕嚕... 恢復了 50 點生命值！');
+                } else if (potions === 0) {
+                    setFeedback('沒有藥水了！');
+                } else {
+                    setFeedback('生命值是滿的！');
+                }
+            };
+
+            const buyItem = (item) => {
+                if (item === 'potion') {
+                    if (score >= 50) {
+                        setScore(prev => prev - 50);
+                        setPotions(prev => prev + 1);
+                        setFeedback('購買了生命藥水！');
+                    } else {
+                        setFeedback('金幣不足！');
+                    }
+                }
+                if (item === 'continue') {
+                    setGameState('PLAYING');
+                    nextLevel(level);
+                }
+            };
+
+            // 1. MENU
+            if (gameState === 'MENU') {
+                return (
+                    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans text-slate-100">
+                        <div className="max-w-md w-full bg-slate-800 rounded-xl shadow-2xl overflow-hidden border-4 border-slate-700">
+                            <div className="p-8 text-center">
+                                <div className="text-6xl mb-4">🛡️⚔️</div>
+                                <h1 className="text-4xl font-bold mb-2 text-yellow-400">因式勇者</h1>
+                                <h2 className="text-xl text-slate-400 mb-8">魔界大冒險</h2>
+                                <p className="text-slate-300 mb-8">運用「因式分解」的力量，擊敗多項式魔物，深入地下城吧！</p>
+                                <button 
+                                    onClick={startGame}
+                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 px-6 rounded-lg text-xl transition transform hover:scale-105 shadow-lg border-b-4 border-indigo-800 active:border-b-0 active:mt-1"
+                                >
+                                    開始冒險
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 2. GAMEOVER
+            if (gameState === 'GAMEOVER') {
+                return (
+                    <div className="min-h-screen bg-red-900/90 flex items-center justify-center p-4 text-white">
+                        <div className="max-w-md w-full bg-slate-800 rounded-xl p-8 text-center border-4 border-red-500 pop-in">
+                            <div className="text-6xl mb-4">💀</div>
+                            <h1 className="text-4xl font-bold mb-4 text-red-500">勇者倒下了</h1>
+                            <p className="text-xl mb-4">你到達了第 <span className="text-yellow-400 font-bold">{level}</span> 層</p>
+                            <p className="text-slate-400 mb-8">別氣餒，因式分解需要多練習！</p>
+                            <button 
+                                onClick={() => setGameState('MENU')}
+                                className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 px-6 rounded-lg"
+                            >
+                                回主選單
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 3. SHOP
+            if (gameState === 'SHOP') {
+                return (
+                    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-slate-100">
+                        <div className="max-w-md w-full bg-slate-800 rounded-xl p-6 border-4 border-yellow-600 pop-in">
+                            <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+                                <h2 className="text-2xl font-bold text-yellow-400">🎒 哥布林商人</h2>
+                                <div className="flex items-center text-yellow-300">
+                                    <span className="mr-2">💰 {score}</span>
+                                </div>
+                            </div>
+                            
+                            <div className="space-y-4 mb-8">
+                                <div className="bg-slate-700 p-4 rounded-lg flex justify-between items-center">
+                                    <div className="flex items-center">
+                                        <span className="text-3xl mr-3">🧪</span>
+                                        <div>
+                                            <div className="font-bold text-red-300">生命藥水</div>
+                                            <div className="text-xs text-slate-400">恢復 50 點 HP</div>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => buyItem('potion')}
+                                        className="bg-green-600 hover:bg-green-500 px-4 py-2 rounded text-sm font-bold active:scale-95 transition"
+                                    >
+                                        $50 購買
+                                    </button>
+                                </div>
+                                <p className="text-center text-slate-400 text-sm mt-4 min-h-[20px]">{feedback}</p>
+                            </div>
+
+                            <button 
+                                onClick={() => buyItem('continue')}
+                                className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-lg font-bold flex items-center justify-center gap-2"
+                            >
+                                繼續冒險 <IconArrowRight size={20}/>
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 4. PLAYING
+            return (
+                <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-start p-4 text-slate-100 font-sans">
+                    
+                    {/* Top Bar */}
+                    <div className="w-full max-w-lg bg-slate-800 rounded-lg p-4 mb-6 shadow-lg border-b-4 border-slate-700 flex justify-between items-center">
+                        <div className="flex items-center gap-4">
+                            <div className="flex flex-col">
+                                <div className="flex items-center gap-2 text-yellow-400 font-bold">
+                                    <IconTrophy size={16} /> LV.{level}
+                                </div>
+                                <div className="text-xs text-slate-400">金幣: {score}</div>
+                            </div>
+                        </div>
+                        
+                        <div className="flex flex-col items-end w-1/2">
+                            <div className="flex items-center gap-1 mb-1">
+                                <IconHeart className="text-red-500 fill-current" />
+                                <span className="font-bold text-xl">{hp}/{maxHp}</span>
+                            </div>
+                            {/* HP Bar */}
+                            <div className="w-full bg-slate-900 h-3 rounded-full overflow-hidden border border-slate-600">
+                                <div 
+                                    className="bg-red-500 h-full transition-all duration-300" 
+                                    style={{width: `${(hp/maxHp)*100}%`}}
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Battle Area */}
+                    <div className={`w-full max-w-lg flex-1 flex flex-col items-center relative transition-transform duration-100 ${shake ? 'shake' : ''}`}>
+                        
+                        {/* Monster */}
+                        <div className="relative mb-8 mt-4 text-center">
+                            {attackAnim && (
+                                <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                                    <div className="text-8xl animate-ping">💥</div>
+                                </div>
+                            )}
+                            
+                            <div className="text-9xl mb-4 animate-bounce duration-[2000ms]">
+                                {currentProblem?.monsterEmoji}
+                            </div>
+                            <div className="bg-slate-800 border-2 border-indigo-500 text-indigo-100 px-6 py-2 rounded-full absolute -top-4 -right-4 shadow-lg text-sm font-bold rotate-12">
+                                HP: {currentProblem?.monsterHp}
+                            </div>
+
+                            {/* Scroll */}
+                            <div className="bg-[#f4e4bc] text-slate-900 px-8 py-6 rounded-sm shadow-xl relative mt-4 max-w-[90vw]">
+                                <div className="absolute top-0 left-0 w-full h-2 bg-[#d4c49c] rounded-t-sm"></div>
+                                <div className="absolute bottom-0 left-0 w-full h-2 bg-[#d4c49c] rounded-b-sm"></div>
+                                
+                                <h3 className="text-sm font-bold text-[#8c7b50] mb-2 tracking-widest uppercase">Monster's Polynomial</h3>
+                                <div className="text-3xl font-black font-mono tracking-wider">
+                                    {currentProblem?.displayExp}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Feedback */}
+                        <div className="w-full bg-slate-800/80 rounded p-3 mb-6 text-center text-cyan-300 min-h-[3.5rem] flex items-center justify-center border border-slate-700">
+                            {feedback}
+                        </div>
+
+                        {/* Options */}
+                        <div className="grid grid-cols-2 gap-4 w-full mb-6">
+                            {currentProblem?.options.map((opt, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => handleAttack(opt)}
+                                    className="bg-slate-700 hover:bg-indigo-600 text-white text-xl font-bold py-4 px-4 rounded-xl border-b-4 border-slate-900 active:border-b-0 active:translate-y-1 transition-all shadow-lg flex items-center justify-center h-20"
+                                >
+                                    <span className="font-mono">{opt}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Bottom Bar */}
+                        <div className="w-full flex justify-between items-center mt-auto pb-4">
+                            <button 
+                                onClick={usePotion}
+                                className={`flex items-center gap-2 px-4 py-3 rounded-lg font-bold border-b-4 transition-all ${potions > 0 ? 'bg-red-600 hover:bg-red-500 border-red-800 text-white active:border-b-0 active:translate-y-1' : 'bg-slate-700 border-slate-800 text-slate-500 cursor-not-allowed'}`}
+                                disabled={potions === 0}
+                            >
+                                <div className="text-2xl">🧪</div>
+                                <div className="flex flex-col items-start leading-none">
+                                    <span className="text-xs">生命藥水</span>
+                                    <span>x{potions}</span>
+                                </div>
+                            </button>
+
+                            <div className="flex gap-2 opacity-50">
+                                <div className="bg-slate-800 p-3 rounded border border-slate-700"><IconShield size={20}/></div>
+                                <div className="bg-slate-800 p-3 rounded border border-slate-700"><IconZap size={20}/></div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<FactorHero />);
+    </script>
+</body>
+</html>
