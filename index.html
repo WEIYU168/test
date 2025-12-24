@@ -3,484 +3,520 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>因式勇者：魔界大冒險</title>
+    <title>Grade 6 English Adventure: Campus Quest</title>
     
-    <!-- 載入 Tailwind CSS -->
+    <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 載入 React 和 ReactDOM -->
+    <!-- 引入 React 和 ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     
-    <!-- 載入 Babel 用於解析 JSX -->
+    <!-- 引入 Babel 用於解析 JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 解決行動裝置點擊延遲與樣式 -->
     <style>
-        body {
-            touch-action: manipulation;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        .shake {
-            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
-        }
-        @keyframes shake {
-            10%, 90% { transform: translate3d(-1px, 0, 0); }
-            20%, 80% { transform: translate3d(2px, 0, 0); }
-            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-            40%, 60% { transform: translate3d(4px, 0, 0); }
-        }
-        .pop-in {
-            animation: popIn 0.3s ease-out;
-        }
-        @keyframes popIn {
-            0% { transform: scale(0.5); opacity: 0; }
-            100% { transform: scale(1); opacity: 1; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .map-pattern {
+            background-image: radial-gradient(#566e56 1px, transparent 1px);
+            background-size: 24px 24px;
         }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-100">
-
-    <div id="root"></div>
+<body class="bg-slate-100 h-screen overflow-hidden">
+    <div id="root" class="h-full"></div>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // --- 圖示組件 (Inline SVGs) ---
-        const IconHeart = ({ className }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-        );
-        const IconShield = ({ className, size=24 }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
-        );
-        const IconZap = ({ className, size=24 }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        );
-        const IconTrophy = ({ size=24 }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-        );
-        const IconArrowRight = ({ size=24 }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        // --- Icons Components (內建 SVG 以確保無需外部依賴) ---
+        const Icon = ({ path, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {path}
+            </svg>
         );
 
-        // --- 遊戲邏輯 ---
-
-        // 生成隨機整數 [min, max]
-        const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-
-        // 題目生成核心邏輯
-        const generateProblem = (level) => {
-            let type = 'common'; // common, cross_simple, cross_hard, square
-            if (level > 3) type = 'cross_simple';
-            if (level > 7) type = 'cross_hard';
-            if (level > 12 && Math.random() > 0.7) type = 'square'; 
-
-            let question = '';
-            let correctFactors = [];
-            let displayExp = '';
-
-            // 1. 提公因式: k(ax + b)
-            if (type === 'common') {
-                const k = randomInt(2, 5);
-                const a = randomInt(1, 3);
-                const b = randomInt(1, 5) * (Math.random() > 0.5 ? 1 : -1);
-                
-                // 展開: k*a*x + k*b
-                const term1 = k * a === 1 ? 'x' : `${k * a}x`;
-                const term2 = k * b > 0 ? `+ ${k * b}` : `- ${Math.abs(k * b)}`;
-                
-                displayExp = `${term1} ${term2}`;
-                correctFactors = [k.toString(), (a === 1 ? `x` : `${a}x`) + (b > 0 ? `+${b}` : b)];
-            } 
-            // 2. 十字交乘 (係數1): (x + a)(x + b)
-            else if (type === 'cross_simple') {
-                const a = randomInt(1, 6) * (Math.random() > 0.5 ? 1 : -1);
-                const b = randomInt(1, 6) * (Math.random() > 0.5 ? 1 : -1);
-                
-                // x^2 + (a+b)x + ab
-                const sum = a + b;
-                const product = a * b;
-                
-                let midTerm = '';
-                if (sum === 0) midTerm = ''; 
-                else if (sum === 1) midTerm = '+ x';
-                else if (sum === -1) midTerm = '- x';
-                else midTerm = sum > 0 ? `+ ${sum}x` : `- ${Math.abs(sum)}x`;
-
-                const lastTerm = product > 0 ? `+ ${product}` : `- ${Math.abs(product)}`;
-                
-                displayExp = `x² ${midTerm} ${lastTerm}`;
-                correctFactors = [`x${a > 0 ? '+' + a : a}`, `x${b > 0 ? '+' + b : b}`];
-            }
-            // 3. 進階十字交乘: (ax + b)(cx + d)
-            else {
-                const a = randomInt(1, 3);
-                const c = randomInt(1, 2);
-                const b = randomInt(1, 5) * (Math.random() > 0.5 ? 1 : -1);
-                const d = randomInt(1, 5) * (Math.random() > 0.5 ? 1 : -1);
-
-                // acx^2 + (ad+bc)x + bd
-                const A = a * c;
-                const B = a * d + b * c;
-                const C = b * d;
-
-                const term1 = A === 1 ? 'x²' : `${A}x²`;
-                
-                let term2 = '';
-                if (B === 0) term2 = '';
-                else if (B === 1) term2 = '+ x';
-                else if (B === -1) term2 = '- x';
-                else term2 = B > 0 ? `+ ${B}x` : `- ${Math.abs(B)}x`;
-
-                const term3 = C > 0 ? `+ ${C}` : `- ${Math.abs(C)}`;
-
-                displayExp = `${term1} ${term2} ${term3}`;
-                correctFactors = [
-                `${a === 1 ? 'x' : a + 'x'}${b > 0 ? '+' + b : b}`,
-                `${c === 1 ? 'x' : c + 'x'}${d > 0 ? '+' + d : d}`
-                ];
-            }
-
-            // 生成選項
-            const targetAnswer = correctFactors[Math.floor(Math.random() * correctFactors.length)];
-            
-            const generateWrong = () => {
-                const base = targetAnswer;
-                if (!isNaN(base)) return (parseInt(base) + randomInt(1,3)).toString(); 
-                
-                let wrong = base;
-                if (base.includes('+')) wrong = base.replace('+', '-');
-                else if (base.includes('-')) wrong = base.replace('-', '+');
-                else wrong = base + '+1';
-                
-                if (Math.random() > 0.5) {
-                    const parts = wrong.match(/[+-]?\d+$/);
-                    if(parts) {
-                        const num = parseInt(parts[0]);
-                        const newNum = num + (Math.random() > 0.5 ? 1 : -1);
-                        wrong = wrong.replace(/[+-]?\d+$/, newNum > 0 ? `+${newNum}` : newNum);
-                    }
-                }
-                return wrong;
-            };
-
-            const options = new Set();
-            options.add(targetAnswer);
-            while (options.size < 4) {
-                let wrong = generateWrong();
-                if (wrong !== targetAnswer && !correctFactors.includes(wrong)) {
-                    options.add(wrong);
-                }
-            }
-
-            return {
-                id: Date.now(),
-                displayExp: displayExp.replace(/\s+/g, ''),
-                targetAnswer,
-                allCorrect: correctFactors,
-                options: Array.from(options).sort(() => Math.random() - 0.5),
-                monsterHp: level > 5 ? 2 : 1,
-                monsterEmoji: ['👾', '👹', '👻', '🤖', '🦖', '🦇'][randomInt(0, 5)]
-            };
+        const Icons = {
+            Map: (props) => <Icon {...props} path={<><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></>} />,
+            School: (props) => <Icon {...props} path={<><path d="M14 22v-4a2 2 0 1 0-4 0v4"></path><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"></path><path d="M18 5v17"></path><path d="m4 6 8-4 8 4"></path><path d="M6 5v17"></path><circle cx="12" cy="9" r="2"></circle></>} />,
+            Trees: (props) => <Icon {...props} path={<><path d="M12 19V5"></path><path d="M5 19h14"></path><path d="M15 19c0-3.3 2.7-6 6-6"></path><path d="M9 19c0-3.3-2.7-6-6-6"></path><path d="M12 5c3.3 0 6 2.7 6 6"></path><path d="M12 5c-3.3 0-6 2.7-6 6"></path></>} />,
+            Utensils: (props) => <Icon {...props} path={<><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path><path d="M7 2v20"></path><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path></>} />,
+            Tent: (props) => <Icon {...props} path={<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2Z"></path><path d="m9 10 6-6"></path><path d="m5 21 9-9"></path><path d="m19 21-9-9"></path></>} />, // Using box/mountain shape for playground
+            BookOpen: (props) => <Icon {...props} path={<><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></>} />,
+            Award: (props) => <Icon {...props} path={<><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></>} />,
+            User: (props) => <Icon {...props} path={<><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></>} />,
+            Star: (props) => <Icon {...props} path={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>} />,
+            Trophy: (props) => <Icon {...props} path={<><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M8 22v-4.19a4 4 0 0 0-2-3.83"></path><path d="M16 22v-4.19a4 4 0 0 1 2-3.83"></path><path d="M12 13v9"></path><path d="M12 3v10"></path></>} />,
+            CheckCircle: (props) => <Icon {...props} path={<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></>} />,
+            HelpCircle: (props) => <Icon {...props} path={<><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></>} />,
+            X: (props) => <Icon {...props} path={<><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></>} />,
+            ChevronRight: (props) => <Icon {...props} path={<polyline points="9 18 15 12 9 6"></polyline>} />
         };
 
+        // --- 遊戲資料 ---
+        const locations = [
+            {
+                id: 1,
+                name: "校門口 (Entrance)",
+                x: 10,
+                y: 80,
+                iconType: "School",
+                color: "bg-blue-500",
+                topic: "Greetings & Introduction",
+                grammar: "Offers & Introductions",
+                mission: "新生導覽員：外籍老師剛抵達，看起來有點迷路。",
+                vocab: ["welcome", "campus", "show you around", "available"],
+                level: 1,
+                quiz: {
+                    question: "外籍老師看著地圖發愁。身為導覽員，你該如何『主動且禮貌』地提出協助？",
+                    options: [
+                        "Hi. You are lost. Look at the map.",
+                        "Welcome! May I show you around the campus?",
+                        "This is a school. It is big.",
+                        "Do you want to go home?"
+                    ],
+                    answer: "Welcome! May I show you around the campus?"
+                }
+            },
+            {
+                id: 2,
+                name: "生態池 (Eco Pond)",
+                x: 25,
+                y: 60,
+                iconType: "Trees",
+                color: "bg-green-500",
+                topic: "Weather & Plans",
+                grammar: "Making Suggestions",
+                mission: "青蛙的預言：天氣突然變了，你需要建議同學改變計畫。",
+                vocab: ["humid", "storm", "indoors", "forecast"],
+                level: 2,
+                quiz: {
+                    question: "天空烏雲密布且空氣很悶濕。你建議大家把野餐改到室內，這時你會怎麼說？",
+                    options: [
+                        "The frog is green and cute.",
+                        "It looks like a storm is coming. Let's stay indoors.",
+                        "I like sunny days very much.",
+                        "Yesterday was a rainy day."
+                    ],
+                    answer: "It looks like a storm is coming. Let's stay indoors."
+                }
+            },
+            {
+                id: 3,
+                name: "福利社 (Cafeteria)",
+                x: 45,
+                y: 75,
+                iconType: "Utensils",
+                color: "bg-orange-500",
+                topic: "Ordering Food",
+                grammar: "Polite Requests",
+                mission: "採購大作戰：幫全班買牛奶，要表現出禮貌。",
+                vocab: ["total", "change", "would like", "sold out"],
+                level: 3,
+                quiz: {
+                    question: "輪到你點餐了。請用最自然的口語向阿姨購買三瓶牛奶，並詢問總金額。",
+                    options: [
+                        "I want three milks. Give me.",
+                        "Excuse me, I'd like three bottles of milk. How much is the total?",
+                        "Three bottles of milk is how many money?",
+                        "Do you have milk? I am hungry."
+                    ],
+                    answer: "Excuse me, I'd like three bottles of milk. How much is the total?"
+                }
+            },
+            {
+                id: 4,
+                name: "操場 (Playground)",
+                x: 60,
+                y: 40,
+                iconType: "Tent",
+                color: "bg-red-500",
+                topic: "Sharing Memories",
+                grammar: "Past Events & Feelings",
+                mission: "運動會回憶錄：向朋友生動地描述那場驚險的比賽。",
+                vocab: ["intense", "catch up", "cheer", "finally"],
+                level: 4,
+                quiz: {
+                    question: "朋友錯過了比賽。你興奮地告訴他，雖然一開始落後，但最後你們逆轉勝了！",
+                    options: [
+                        "I run fast yesterday and win.",
+                        "It was intense! We were behind, but we caught up and won!",
+                        "The race is boring and I am tired.",
+                        "I will win the race next time."
+                    ],
+                    answer: "It was intense! We were behind, but we caught up and won!"
+                }
+            },
+            {
+                id: 5,
+                name: "圖書館 (Library)",
+                x: 35,
+                y: 20,
+                iconType: "BookOpen",
+                color: "bg-purple-500",
+                topic: "Explaining Situations",
+                grammar: "Past Continuous (Reasons)",
+                mission: "消失的書頁：解釋為什麼你沒聽到剛才的廣播。",
+                vocab: ["absorbed", "focus", "adventure", "realize"],
+                level: 5,
+                quiz: {
+                    question: "圖書館員提醒你閉館了。你抱歉地解釋，因為書太好看了，讓你完全「忘了時間」。",
+                    options: [
+                        "Sorry, I was so absorbed in the story that I lost track of time.",
+                        "I am reading a book now.",
+                        "The book is very heavy and old.",
+                        "I didn't hear you because I was sleeping."
+                    ],
+                    answer: "Sorry, I was so absorbed in the story that I lost track of time."
+                }
+            },
+            {
+                id: 6,
+                name: "校長室 (Principal's Office)",
+                x: 85,
+                y: 15,
+                iconType: "Award",
+                color: "bg-yellow-500",
+                topic: "Aspirations",
+                grammar: "Future Plans & Reasons",
+                mission: "畢業的承諾：不僅說出夢想，還要解釋背後的熱情。",
+                vocab: ["protect", "environment", "scientist", "passion"],
+                level: 6,
+                quiz: {
+                    question: "校長問你為什麼想當科學家？你想表達你對「解決環境問題」很有熱情。",
+                    options: [
+                        "I am going to be a scientist. It is cool.",
+                        "Because my mom wants me to be a scientist.",
+                        "I want to contain the pollution.",
+                        "I want to be a scientist because I'm passionate about saving the environment."
+                    ],
+                    answer: "I want to be a scientist because I'm passionate about saving the environment."
+                }
+            }
+        ];
+
         // --- 主程式 ---
-
-        function FactorHero() {
-            const [gameState, setGameState] = useState('MENU');
-            const [level, setLevel] = useState(1);
+        function App() {
+            const [selectedLocation, setSelectedLocation] = useState(null);
+            const [avatarLocation, setAvatarLocation] = useState({ x: 10, y: 80 });
             const [score, setScore] = useState(0);
-            const [hp, setHp] = useState(100);
-            const [maxHp, setMaxHp] = useState(100);
-            const [potions, setPotions] = useState(1);
-            
-            const [currentProblem, setCurrentProblem] = useState(null);
-            const [feedback, setFeedback] = useState('');
-            const [shake, setShake] = useState(false);
-            const [attackAnim, setAttackAnim] = useState(false);
+            const [completedLevels, setCompletedLevels] = useState([]);
+            const [quizMode, setQuizMode] = useState(false);
+            const [quizStatus, setQuizStatus] = useState('idle');
 
-            const startGame = () => {
-                setLevel(1);
-                setScore(0);
-                setHp(100);
-                setMaxHp(100);
-                setPotions(1);
-                setGameState('PLAYING');
-                nextLevel(1);
+            useEffect(() => {
+                if (selectedLocation) {
+                    setAvatarLocation({ x: selectedLocation.x, y: selectedLocation.y });
+                    setQuizMode(false);
+                    setQuizStatus('idle');
+                }
+            }, [selectedLocation]);
+
+            const handleStartChallenge = () => {
+                setQuizMode(true);
+                setQuizStatus('idle');
             };
 
-            const nextLevel = (lvl) => {
-                const p = generateProblem(lvl);
-                setCurrentProblem(p);
-                setFeedback('魔物出現了！找出它的因式弱點！');
-            };
-
-            const handleAttack = (selectedOption) => {
-                if (!currentProblem) return;
-
-                const isCorrect = currentProblem.allCorrect.includes(selectedOption);
-
-                if (isCorrect) {
-                    // 攻擊成功
-                    setAttackAnim(true);
-                    setTimeout(() => setAttackAnim(false), 500);
-                    
-                    const goldGain = 10 + Math.floor(level * 1.5);
-                    setScore(prev => prev + goldGain);
-                    setFeedback(`會心一擊！對魔物造成 9999 點傷害！獲得 ${goldGain} 金幣。`);
-                    
-                    setTimeout(() => {
-                        const nextLvl = level + 1;
-                        setLevel(nextLvl);
-                        if (nextLvl % 5 === 0) {
-                            setFeedback('魔物掉落了稀有寶箱...');
-                            setTimeout(() => setGameState('SHOP'), 1000);
-                        } else {
-                            nextLevel(nextLvl);
-                        }
-                    }, 1000);
-
-                } else {
-                    // 攻擊失敗
-                    setShake(true);
-                    setTimeout(() => setShake(false), 500);
-                    
-                    const damage = 20 + Math.floor(level * 2);
-                    const newHp = hp - damage;
-                    setHp(newHp);
-                    
-                    const taunts = [
-                        "魔物：「算錯了吧！哈哈！」",
-                        "魔物：「你的符號沒變號喔！」",
-                        "魔物：「十字交乘再練練吧！」",
-                        "受到重擊！痛啊！"
-                    ];
-                    setFeedback(`${taunts[randomInt(0, 3)]} (HP -${damage})`);
-
-                    if (newHp <= 0) {
-                        setTimeout(() => setGameState('GAMEOVER'), 1000);
+            const handleAnswerCheck = (option) => {
+                if (option === selectedLocation.quiz.answer) {
+                    setQuizStatus('correct');
+                    if (!completedLevels.includes(selectedLocation.id)) {
+                        setScore(prev => prev + 100);
+                        setCompletedLevels(prev => [...prev, selectedLocation.id]);
                     }
-                }
-            };
-
-            const usePotion = () => {
-                if (potions > 0 && hp < maxHp) {
-                    setPotions(prev => prev - 1);
-                    setHp(prev => Math.min(prev + 50, maxHp));
-                    setFeedback('咕嚕咕嚕... 恢復了 50 點生命值！');
-                } else if (potions === 0) {
-                    setFeedback('沒有藥水了！');
                 } else {
-                    setFeedback('生命值是滿的！');
+                    setQuizStatus('incorrect');
+                    setScore(prev => Math.max(0, prev - 10));
                 }
             };
 
-            const buyItem = (item) => {
-                if (item === 'potion') {
-                    if (score >= 50) {
-                        setScore(prev => prev - 50);
-                        setPotions(prev => prev + 1);
-                        setFeedback('購買了生命藥水！');
-                    } else {
-                        setFeedback('金幣不足！');
-                    }
-                }
-                if (item === 'continue') {
-                    setGameState('PLAYING');
-                    nextLevel(level);
-                }
-            };
-
-            // 1. MENU
-            if (gameState === 'MENU') {
-                return (
-                    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans text-slate-100">
-                        <div className="max-w-md w-full bg-slate-800 rounded-xl shadow-2xl overflow-hidden border-4 border-slate-700">
-                            <div className="p-8 text-center">
-                                <div className="text-6xl mb-4">🛡️⚔️</div>
-                                <h1 className="text-4xl font-bold mb-2 text-yellow-400">因式勇者</h1>
-                                <h2 className="text-xl text-slate-400 mb-8">魔界大冒險</h2>
-                                <p className="text-slate-300 mb-8">運用「因式分解」的力量，擊敗多項式魔物，深入地下城吧！</p>
-                                <button 
-                                    onClick={startGame}
-                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 px-6 rounded-lg text-xl transition transform hover:scale-105 shadow-lg border-b-4 border-indigo-800 active:border-b-0 active:mt-1"
-                                >
-                                    開始冒險
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            // 2. GAMEOVER
-            if (gameState === 'GAMEOVER') {
-                return (
-                    <div className="min-h-screen bg-red-900/90 flex items-center justify-center p-4 text-white">
-                        <div className="max-w-md w-full bg-slate-800 rounded-xl p-8 text-center border-4 border-red-500 pop-in">
-                            <div className="text-6xl mb-4">💀</div>
-                            <h1 className="text-4xl font-bold mb-4 text-red-500">勇者倒下了</h1>
-                            <p className="text-xl mb-4">你到達了第 <span className="text-yellow-400 font-bold">{level}</span> 層</p>
-                            <p className="text-slate-400 mb-8">別氣餒，因式分解需要多練習！</p>
-                            <button 
-                                onClick={() => setGameState('MENU')}
-                                className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 px-6 rounded-lg"
-                            >
-                                回主選單
-                            </button>
-                        </div>
-                    </div>
-                );
-            }
-
-            // 3. SHOP
-            if (gameState === 'SHOP') {
-                return (
-                    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-slate-100">
-                        <div className="max-w-md w-full bg-slate-800 rounded-xl p-6 border-4 border-yellow-600 pop-in">
-                            <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
-                                <h2 className="text-2xl font-bold text-yellow-400">🎒 哥布林商人</h2>
-                                <div className="flex items-center text-yellow-300">
-                                    <span className="mr-2">💰 {score}</span>
-                                </div>
-                            </div>
-                            
-                            <div className="space-y-4 mb-8">
-                                <div className="bg-slate-700 p-4 rounded-lg flex justify-between items-center">
-                                    <div className="flex items-center">
-                                        <span className="text-3xl mr-3">🧪</span>
-                                        <div>
-                                            <div className="font-bold text-red-300">生命藥水</div>
-                                            <div className="text-xs text-slate-400">恢復 50 點 HP</div>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => buyItem('potion')}
-                                        className="bg-green-600 hover:bg-green-500 px-4 py-2 rounded text-sm font-bold active:scale-95 transition"
-                                    >
-                                        $50 購買
-                                    </button>
-                                </div>
-                                <p className="text-center text-slate-400 text-sm mt-4 min-h-[20px]">{feedback}</p>
-                            </div>
-
-                            <button 
-                                onClick={() => buyItem('continue')}
-                                className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-lg font-bold flex items-center justify-center gap-2"
-                            >
-                                繼續冒險 <IconArrowRight size={20}/>
-                            </button>
-                        </div>
-                    </div>
-                );
-            }
-
-            // 4. PLAYING
             return (
-                <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-start p-4 text-slate-100 font-sans">
-                    
-                    {/* Top Bar */}
-                    <div className="w-full max-w-lg bg-slate-800 rounded-lg p-4 mb-6 shadow-lg border-b-4 border-slate-700 flex justify-between items-center">
+                <div className="flex flex-col h-screen bg-slate-100 font-sans select-none">
+                    {/* Header */}
+                    <header className="bg-indigo-600 text-white p-4 shadow-md flex justify-between items-center z-10">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-indigo-500 p-2 rounded-lg">
+                                <Icons.Map className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-bold">Campus Quest: Grade 6</h1>
+                                <p className="text-indigo-200 text-xs">School Adventure Map</p>
+                            </div>
+                        </div>
+                        
                         <div className="flex items-center gap-4">
-                            <div className="flex flex-col">
-                                <div className="flex items-center gap-2 text-yellow-400 font-bold">
-                                    <IconTrophy size={16} /> LV.{level}
+                            <div className="flex items-center gap-2 bg-indigo-800/50 px-4 py-2 rounded-xl border border-indigo-400/30">
+                                <Icons.Trophy className="w-5 h-5 text-yellow-400" />
+                                <div className="flex flex-col items-end leading-none">
+                                    <span className="text-xs text-indigo-200 font-medium">SCORE</span>
+                                    <span className="text-xl font-bold text-white font-mono">{score}</span>
                                 </div>
-                                <div className="text-xs text-slate-400">金幣: {score}</div>
+                            </div>
+                            <div className="text-sm bg-indigo-700 px-3 py-1 rounded-full hidden md:block">
+                            Level: 6th Grade
                             </div>
                         </div>
-                        
-                        <div className="flex flex-col items-end w-1/2">
-                            <div className="flex items-center gap-1 mb-1">
-                                <IconHeart className="text-red-500 fill-current" />
-                                <span className="font-bold text-xl">{hp}/{maxHp}</span>
-                            </div>
-                            {/* HP Bar */}
-                            <div className="w-full bg-slate-900 h-3 rounded-full overflow-hidden border border-slate-600">
-                                <div 
-                                    className="bg-red-500 h-full transition-all duration-300" 
-                                    style={{width: `${(hp/maxHp)*100}%`}}
-                                ></div>
-                            </div>
-                        </div>
-                    </div>
+                    </header>
 
-                    {/* Battle Area */}
-                    <div className={`w-full max-w-lg flex-1 flex flex-col items-center relative transition-transform duration-100 ${shake ? 'shake' : ''}`}>
+                    {/* Main Content Area */}
+                    <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
                         
-                        {/* Monster */}
-                        <div className="relative mb-8 mt-4 text-center">
-                            {attackAnim && (
-                                <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                                    <div className="text-8xl animate-ping">💥</div>
+                        {/* Left Panel: The Map */}
+                        <div className="flex-1 relative bg-[#e3f5e3] overflow-hidden cursor-move group">
+                            {/* Map Image Layer */}
+                            <img 
+                                src="中教大.png"
+                                alt="Campus Map"
+                                className="absolute inset-0 w-full h-full object-cover z-0 opacity-60 mix-blend-multiply pointer-events-none"
+                                onError={(e) => e.currentTarget.style.display = 'none'}
+                            />
+
+                            {/* Map Background Pattern */}
+                            <div className="absolute inset-0 opacity-10 pointer-events-none map-pattern"></div>
+
+                            {/* Decorative Terrain Elements */}
+                            <div className="absolute top-10 right-10 w-32 h-32 bg-green-200/50 rounded-full blur-2xl"></div>
+                            <div className="absolute bottom-20 left-20 w-48 h-48 bg-blue-200/50 rounded-full blur-2xl"></div>
+
+                            {/* Connection Path */}
+                            <svg className="absolute inset-0 w-full h-full pointer-events-none drop-shadow-sm">
+                                <path d="M10% 80% Q 15% 70%, 25% 60% T 45% 75% T 60% 40% T 35% 20% T 85% 15%" fill="none" stroke="white" strokeWidth="6" strokeLinecap="round" />
+                                <path d="M10% 80% Q 15% 70%, 25% 60% T 45% 75% T 60% 40% T 35% 20% T 85% 15%" fill="none" stroke="#94a3b8" strokeWidth="2" strokeDasharray="6 6" strokeLinecap="round" />
+                            </svg>
+
+                            {/* Map Nodes */}
+                            {locations.map((loc) => {
+                                const isCompleted = completedLevels.includes(loc.id);
+                                const isSelected = selectedLocation?.id === loc.id;
+                                const IconComp = Icons[loc.iconType];
+                                
+                                return (
+                                    <button
+                                        key={loc.id}
+                                        onClick={() => setSelectedLocation(loc)}
+                                        className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 focus:outline-none group/node z-10
+                                            ${isSelected ? 'scale-110 z-20' : 'scale-100 hover:scale-105'}
+                                        `}
+                                        style={{ left: `${loc.x}%`, top: `${loc.y}%` }}
+                                    >
+                                        {isCompleted && (
+                                            <div className="absolute -top-3 -right-2 z-30 bg-white rounded-full p-0.5 shadow-sm animate-bounce">
+                                                <Icons.CheckCircle className="w-5 h-5 text-green-500 fill-green-100" />
+                                            </div>
+                                        )}
+                                        <div className={`
+                                            w-14 h-14 rounded-full flex items-center justify-center border-[3px] shadow-lg transition-colors duration-300 relative overflow-hidden
+                                            ${isSelected ? 'border-indigo-600 shadow-indigo-200' : 'border-white'}
+                                            ${loc.color}
+                                        `}>
+                                            <div className="relative z-10 transform transition-transform duration-300 group-hover/node:scale-110">
+                                                <IconComp className="w-7 h-7 text-white" />
+                                            </div>
+                                            {!isCompleted && !isSelected && (
+                                                <div className="absolute inset-0 bg-white opacity-0 group-hover/node:opacity-20 transition-opacity"></div>
+                                            )}
+                                        </div>
+                                        <div className={`
+                                            absolute top-16 left-1/2 transform -translate-x-1/2 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap shadow-md transition-all
+                                            ${isSelected ? 'bg-indigo-600 text-white scale-110' : 'bg-white/90 text-slate-700'}
+                                        `}>
+                                            {loc.name}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+
+                            {/* Student Avatar */}
+                            <div 
+                                className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-none transition-all duration-1000 ease-in-out z-20 flex flex-col items-center"
+                                style={{ left: `${avatarLocation.x}%`, top: `${avatarLocation.y}%` }}
+                            >
+                                <div className="relative">
+                                    <div className="w-12 h-12 bg-white rounded-full border-2 border-indigo-600 shadow-xl flex items-center justify-center relative z-10">
+                                        <Icons.User className="w-7 h-7 text-indigo-600" />
+                                    </div>
+                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-2 bg-black/20 rounded-full blur-sm"></div>
+                                </div>
+                                <div className="mt-1 bg-indigo-900/80 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">YOU</div>
+                            </div>
+
+                            {/* Start/End Markers */}
+                            <div className="absolute left-[10%] top-[88%] transform -translate-x-1/2 text-slate-400/80 font-bold text-sm tracking-widest pointer-events-none">START</div>
+                            <div className="absolute left-[85%] top-[5%] transform -translate-x-1/2 text-yellow-600/80 font-bold text-sm tracking-widest flex items-center gap-1 pointer-events-none">
+                                <Icons.Star className="w-4 h-4 fill-current" /> GOAL
+                            </div>
+                        </div>
+
+                        {/* Right Panel */}
+                        <div className={`
+                            absolute md:relative inset-y-0 right-0 w-full md:w-[420px] bg-white shadow-2xl transform transition-transform duration-300 z-30 flex flex-col
+                            ${selectedLocation ? 'translate-x-0' : 'translate-x-full md:translate-x-0 md:w-0 md:opacity-0'}
+                        `}>
+                            {selectedLocation ? (
+                                <>
+                                    <div className={`relative h-32 ${selectedLocation.color} p-6 flex items-end justify-between overflow-hidden shrink-0`}>
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/5 rounded-full translate-y-1/2 -translate-x-1/2"></div>
+                                        <div className="relative z-10 text-white">
+                                            <div className="flex items-center gap-2 mb-1 opacity-90 text-sm font-medium">
+                                                <span>Level {selectedLocation.level}</span>
+                                                <span>•</span>
+                                                <span>{selectedLocation.topic}</span>
+                                            </div>
+                                            <h2 className="text-2xl font-bold leading-tight shadow-black/10 drop-shadow-md">{selectedLocation.name}</h2>
+                                        </div>
+                                        <button 
+                                            onClick={() => setSelectedLocation(null)}
+                                            className="absolute top-4 right-4 p-2 text-white/70 hover:text-white hover:bg-white/20 rounded-full transition-colors"
+                                        >
+                                            <Icons.X className="w-6 h-6" />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex-1 overflow-y-auto bg-slate-50">
+                                        {!quizMode ? (
+                                            <div className="p-6 space-y-6">
+                                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-50">
+                                                    <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                                                        <div className="p-1.5 bg-yellow-100 rounded-lg">
+                                                            <Icons.Star className="w-4 h-4 text-yellow-600 fill-yellow-600" />
+                                                        </div>
+                                                        Mission Objective
+                                                    </h3>
+                                                    <p className="text-slate-600 text-sm leading-relaxed pl-1">
+                                                        {selectedLocation.mission}
+                                                    </p>
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-4">
+                                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Target Grammar</h4>
+                                                        <div className="text-indigo-600 font-medium text-sm bg-indigo-50 p-2 rounded-lg border border-indigo-100">
+                                                            {selectedLocation.grammar}
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Vocabulary</h4>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {selectedLocation.vocab.map((word, idx) => (
+                                                                <span key={idx} className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 rounded-md border border-slate-200">
+                                                                    {word}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="p-6 h-full flex flex-col">
+                                                <div className="flex-1">
+                                                    <div className="mb-6 flex items-center gap-2 text-indigo-600 font-bold bg-indigo-50 w-fit px-3 py-1 rounded-full text-sm">
+                                                        <Icons.HelpCircle className="w-4 h-4" />
+                                                        Challenge Quiz
+                                                    </div>
+                                                    <h3 className="text-lg font-bold text-slate-800 mb-6 leading-relaxed">
+                                                        {selectedLocation.quiz.question}
+                                                    </h3>
+                                                    <div className="space-y-3">
+                                                        {selectedLocation.quiz.options.map((option, idx) => {
+                                                            let btnClass = "w-full text-left p-4 rounded-xl border-2 transition-all duration-200 font-medium text-sm flex justify-between items-center group ";
+                                                            if (quizStatus === 'idle') {
+                                                                btnClass += "bg-white border-slate-200 text-slate-600 hover:border-indigo-400 hover:bg-indigo-50";
+                                                            } else if (quizStatus === 'correct' && option === selectedLocation.quiz.answer) {
+                                                                btnClass += "bg-green-50 border-green-500 text-green-700 shadow-md";
+                                                            } else if (quizStatus === 'incorrect' && option === selectedLocation.quiz.answer) {
+                                                                btnClass += "bg-green-50 border-green-500 text-green-700 opacity-70"; 
+                                                            } else if (quizStatus === 'incorrect' && option !== selectedLocation.quiz.answer) {
+                                                                btnClass += "bg-red-50 border-red-200 text-red-400 opacity-50";
+                                                            } else {
+                                                                btnClass += "bg-white border-slate-100 text-slate-300";
+                                                            }
+
+                                                            return (
+                                                                <button 
+                                                                    key={idx}
+                                                                    disabled={quizStatus !== 'idle'}
+                                                                    onClick={() => handleAnswerCheck(option)}
+                                                                    className={btnClass}
+                                                                >
+                                                                    <span className="flex-1">{option}</span>
+                                                                    {quizStatus === 'correct' && option === selectedLocation.quiz.answer && (
+                                                                        <Icons.CheckCircle className="w-5 h-5 text-green-600" />
+                                                                    )}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                    {quizStatus === 'correct' && (
+                                                        <div className="mt-6 p-4 bg-green-100 text-green-800 rounded-xl text-center font-bold animate-pulse">
+                                                            🎉 Excellent! Mission Complete! (+100 pts)
+                                                        </div>
+                                                    )}
+                                                    {quizStatus === 'incorrect' && (
+                                                        <div className="mt-6 p-4 bg-red-100 text-red-800 rounded-xl text-center font-bold">
+                                                            😅 Oops! Try again carefully. (-10 pts)
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="p-4 bg-white border-t border-slate-100">
+                                        {!quizMode ? (
+                                            <button 
+                                                onClick={handleStartChallenge}
+                                                className={`w-full ${selectedLocation.color} filter brightness-95 hover:brightness-110 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2`}
+                                            >
+                                                Start Challenge
+                                                <Icons.ChevronRight className="w-5 h-5" />
+                                            </button>
+                                        ) : (
+                                            <div className="flex gap-3">
+                                                {quizStatus === 'incorrect' && (
+                                                    <button 
+                                                        onClick={() => setQuizStatus('idle')}
+                                                        className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl transition-colors"
+                                                    >
+                                                        Retry
+                                                    </button>
+                                                )}
+                                                {quizStatus === 'correct' && (
+                                                    <button 
+                                                        onClick={() => setSelectedLocation(null)}
+                                                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-green-200 transition-colors"
+                                                    >
+                                                        Continue Journey
+                                                    </button>
+                                                )}
+                                                {quizStatus === 'idle' && (
+                                                    <button 
+                                                        onClick={() => setQuizMode(false)}
+                                                        className="flex-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-500 font-bold py-3 rounded-xl transition-colors"
+                                                    >
+                                                        Back to Info
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 text-center bg-slate-50/50">
+                                    <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm border border-slate-100">
+                                        <Icons.User className="w-10 h-10 text-slate-300" />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-slate-600 mb-2">Ready for Adventure?</h3>
+                                    <p className="text-sm max-w-[200px]">Click on any location marker on the map to move your character and start a mission.</p>
                                 </div>
                             )}
-                            
-                            <div className="text-9xl mb-4 animate-bounce duration-[2000ms]">
-                                {currentProblem?.monsterEmoji}
-                            </div>
-                            <div className="bg-slate-800 border-2 border-indigo-500 text-indigo-100 px-6 py-2 rounded-full absolute -top-4 -right-4 shadow-lg text-sm font-bold rotate-12">
-                                HP: {currentProblem?.monsterHp}
-                            </div>
-
-                            {/* Scroll */}
-                            <div className="bg-[#f4e4bc] text-slate-900 px-8 py-6 rounded-sm shadow-xl relative mt-4 max-w-[90vw]">
-                                <div className="absolute top-0 left-0 w-full h-2 bg-[#d4c49c] rounded-t-sm"></div>
-                                <div className="absolute bottom-0 left-0 w-full h-2 bg-[#d4c49c] rounded-b-sm"></div>
-                                
-                                <h3 className="text-sm font-bold text-[#8c7b50] mb-2 tracking-widest uppercase">Monster's Polynomial</h3>
-                                <div className="text-3xl font-black font-mono tracking-wider">
-                                    {currentProblem?.displayExp}
-                                </div>
-                            </div>
                         </div>
-
-                        {/* Feedback */}
-                        <div className="w-full bg-slate-800/80 rounded p-3 mb-6 text-center text-cyan-300 min-h-[3.5rem] flex items-center justify-center border border-slate-700">
-                            {feedback}
-                        </div>
-
-                        {/* Options */}
-                        <div className="grid grid-cols-2 gap-4 w-full mb-6">
-                            {currentProblem?.options.map((opt, idx) => (
-                                <button
-                                    key={idx}
-                                    onClick={() => handleAttack(opt)}
-                                    className="bg-slate-700 hover:bg-indigo-600 text-white text-xl font-bold py-4 px-4 rounded-xl border-b-4 border-slate-900 active:border-b-0 active:translate-y-1 transition-all shadow-lg flex items-center justify-center h-20"
-                                >
-                                    <span className="font-mono">{opt}</span>
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Bottom Bar */}
-                        <div className="w-full flex justify-between items-center mt-auto pb-4">
-                            <button 
-                                onClick={usePotion}
-                                className={`flex items-center gap-2 px-4 py-3 rounded-lg font-bold border-b-4 transition-all ${potions > 0 ? 'bg-red-600 hover:bg-red-500 border-red-800 text-white active:border-b-0 active:translate-y-1' : 'bg-slate-700 border-slate-800 text-slate-500 cursor-not-allowed'}`}
-                                disabled={potions === 0}
-                            >
-                                <div className="text-2xl">🧪</div>
-                                <div className="flex flex-col items-start leading-none">
-                                    <span className="text-xs">生命藥水</span>
-                                    <span>x{potions}</span>
-                                </div>
-                            </button>
-
-                            <div className="flex gap-2 opacity-50">
-                                <div className="bg-slate-800 p-3 rounded border border-slate-700"><IconShield size={20}/></div>
-                                <div className="bg-slate-800 p-3 rounded border border-slate-700"><IconZap size={20}/></div>
-                            </div>
-                        </div>
-                        
                     </div>
                 </div>
             );
         }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<FactorHero />);
+        root.render(<App />);
     </script>
 </body>
 </html>
