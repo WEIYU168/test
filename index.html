@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>夢想探索者：未來之路 (精緻版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Nunito', 'Noto Sans TC', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            touch-action: none; 
+        }
+        
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .pixel-border {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), inset 0 -4px 0 rgba(0,0,0,0.2);
+        }
+
+        /* 虛擬搖桿樣式 */
+        #dpad {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 150px;
+            height: 150px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 5px;
+            opacity: 0.6;
+            z-index: 10;
+        }
+
+        .dpad-btn {
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            user-select: none;
+        }
+        .dpad-btn:active {
+            background: rgba(200, 200, 200, 0.9);
+        }
+        
+        #up { grid-column: 2; grid-row: 1; }
+        #left { grid-column: 1; grid-row: 2; }
+        #right { grid-column: 3; grid-row: 2; }
+        #down { grid-column: 2; grid-row: 3; }
+
+        @media (min-width: 768px) {
+            #dpad { display: none; }
+        }
+        
+        .modal-enter { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI 介面 -->
+    <div id="ui-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none p-4 flex flex-col justify-between">
+        <!-- 頂部資訊列 -->
+        <div class="flex justify-between items-start">
+            <!-- 左側：生命值 & 音樂控制 -->
+            <div class="flex flex-col gap-2 pointer-events-auto">
+                <div class="bg-white/90 p-3 rounded-2xl pixel-border">
+                    <div class="text-sm font-bold text-gray-600 mb-1">生命值 (HP)</div>
+                    <div id="hp-container" class="flex gap-1 text-2xl">❤️ ❤️ ❤️</div>
+                </div>
+                <button id="mute-btn" class="bg-white/90 p-2 rounded-xl pixel-border text-lg w-12 h-12 flex justify-center items-center hover:bg-gray-100 transition-colors">
+                    🔊
+                </button>
+            </div>
+
+            <!-- 右側：分數與道具 -->
+            <div class="bg-white/90 p-3 rounded-2xl pixel-border pointer-events-auto text-right">
+                <div class="text-sm font-bold text-gray-600 mb-1">探索分數</div>
+                <div id="score-display" class="text-2xl font-black text-blue-600">0</div>
+                <div class="mt-2 flex items-center justify-end gap-2">
+                    <div class="w-5 h-5 rounded-full bg-red-500 border-2 border-white relative overflow-hidden shadow-sm">
+                        <div class="absolute bottom-0 w-full h-1/2 bg-white"></div>
+                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full border border-gray-800"></div>
+                    </div>
+                    <span id="orb-display" class="font-bold text-gray-700">x 0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 虛擬搖桿 (手機版) -->
+    <div id="dpad">
+        <div id="up" class="dpad-btn pointer-events-auto">⬆️</div>
+        <div id="left" class="dpad-btn pointer-events-auto">⬅️</div>
+        <div id="right" class="dpad-btn pointer-events-auto">➡️</div>
+        <div id="down" class="dpad-btn pointer-events-auto">⬇️</div>
+    </div>
+
+    <!-- 彈出視窗 -->
+    <div id="modal-overlay" class="absolute top-0 left-0 w-full h-full bg-black/60 z-50 hidden flex justify-center items-center p-4">
+        <div id="modal-content" class="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full pixel-border text-center modal-enter">
+            <div id="modal-character" class="text-6xl mb-4">👾</div>
+            <h2 id="modal-title" class="text-2xl font-black text-gray-800 mb-2">遇到誘惑小怪！</h2>
+            <p id="modal-text" class="text-gray-600 mb-6 text-lg">對話內容...</p>
+            
+            <div id="modal-options" class="flex flex-col gap-3"></div>
+            
+            <button id="modal-continue" class="hidden w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-xl mt-4 transition-colors pixel-border">繼續前進</button>
+        </div>
+    </div>
+
+    <!-- 開始畫面 -->
+    <div id="start-screen" class="absolute top-0 left-0 w-full h-full bg-[#fcd34d] z-50 flex justify-center items-center p-4 bg-gradient-to-b from-[#93c5fd] to-[#86efac]">
+        <div class="bg-white/95 rounded-3xl p-8 max-w-md w-full pixel-border text-center shadow-2xl">
+            <div class="text-7xl mb-4">🌍</div>
+            <h1 class="text-3xl font-black text-green-700 mb-2">夢想探索者</h1>
+            <h2 class="text-xl font-bold text-gray-600 mb-6">未來之路 (精緻版)</h2>
+            <p class="text-gray-600 mb-4 text-left text-sm leading-relaxed">
+                穿越鄉村、森林、海洋與城市，探索你的未來！<br><br>
+                🔴 蒐集「志願球」來獲得分數。<br>
+                👾 面對誘惑與迷惘，選出正確的生涯觀念。<br>
+                🎵 遊戲包含專屬音效與配樂。
+            </p>
+            <div class="flex justify-center gap-4 mb-6 text-2xl">
+                ⌨️ 方向鍵 或 WASD 移動
+            </div>
+            <button id="start-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-4 px-4 rounded-2xl text-xl transition-transform hover:scale-105 pixel-border">
+                開始探索！
+            </button>
+        </div>
+    </div>
+
+    <!-- 影片播放層 -->
+    <div id="video-overlay" class="absolute top-0 left-0 w-full h-full bg-black z-[60] hidden flex flex-col justify-center items-center">
+        <video id="intro-video" class="max-w-full max-h-full" playsinline preload="auto">
+            <source src="開頭影片.mp4" type="video/mp4">
+            您的瀏覽器不支援影片標籤。
+        </video>
+        <button id="skip-video-btn" class="absolute bottom-10 right-10 bg-white/20 hover:bg-white/40 text-white border-2 border-white px-4 py-2 rounded-xl backdrop-blur-sm transition-all z-[61]">
+            跳過動畫 ⏭️
+        </button>
+    </div>
+
+    <script>
+        // --- 音效系統 (Web Audio API) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+        let isMuted = false;
+        let bgmInterval;
+        
+        function initAudio() {
+            if(!audioCtx) audioCtx = new AudioContext();
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playTone(freq, type, duration, vol) {
+            if (isMuted || !audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            
+            gain.gain.setValueAtTime(0, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + duration * 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        const sfx = {
+            collect: () => { playTone(880, 'sine', 0.1, 0.1); setTimeout(() => playTone(1760, 'sine', 0.2, 0.1), 100); },
+            hit: () => playTone(150, 'sawtooth', 0.3, 0.1),
+            correct: () => { playTone(440, 'triangle', 0.1, 0.1); setTimeout(() => playTone(554, 'triangle', 0.1, 0.1), 100); setTimeout(() => playTone(659, 'triangle', 0.3, 0.1), 200); },
+            wrong: () => { playTone(300, 'square', 0.2, 0.1); setTimeout(() => playTone(250, 'square', 0.4, 0.1), 150); },
+            win: () => { [523, 659, 783, 1046].forEach((f, i) => setTimeout(() => playTone(f, 'sine', 0.5, 0.2), i * 150)); }
+        };
+
+        // --- 載入外部背景音樂與圖片 ---
+        const bgmAudio = new Audio('背景音樂.mp3');
+        bgmAudio.loop = true;
+        const bgImage = new Image();
+        bgImage.src = '奇幻世界.PNG';
+
+        document.getElementById('mute-btn').addEventListener('click', (e) => {
+            isMuted = !isMuted;
+            e.target.innerText = isMuted ? '🔇' : '🔊';
+            if (isMuted) {
+                bgmAudio.pause();
+            } else if (gameState === 'playing') {
+                bgmAudio.play().catch(err => console.log(err));
+            }
+        });
+
+        // --- 遊戲資料與設定 ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        let gameState = 'start';
+        const camera = { x: 0, y: 0 };
+        const worldWidth = 2000;
+        const worldHeight = 3600; // 加長世界以容納四大區域
+
+        const player = {
+            x: worldWidth / 2, y: worldHeight - 200, radius: 20, speed: 6,
+            hp: 3, maxHp: 3, score: 0, orbs: 0, color: '#4299e1', vx: 0, vy: 0, facing: 1 // 1: right, -1: left
+        };
+
+        const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, s: false, a: false, d: false };
+
+        const monstersData = [
+            { type: 'monster', emoji: '👾', name: '懶惰蟲小怪', question: "學校週末舉辦『職業體驗營』。但懶惰蟲說：『週末就是要睡到飽！去什麼體驗營！』", choices: [{ text: "聽懶惰蟲的，在家睡覺打電動。", correct: false, feedback: "太可惜了！錯失了探索興趣的好機會。生命值 -1" }, { text: "報名參加！提早了解未來的可能。", correct: true, feedback: "太棒了！主動探索是生涯規劃的第一步！獲得 50 分！" }] },
+            { type: 'monster', emoji: '👻', name: '自我懷疑幽靈', question: "你很喜歡畫畫。但同學笑你：『畫畫又不能當飯吃，算了吧！』自我懷疑幽靈纏上了你...", choices: [{ text: "堅持興趣，當作專長培養，或許未來能結合其他技能！", correct: true, feedback: "說得對！每一個興趣都有可能成為未來的獨特優勢。獲得 50 分！" }, { text: "他們說得對，我還是跟大家一樣補習就好。", correct: false, feedback: "不要輕易放棄自己喜歡的事物！生命值 -1" }] },
+            { type: 'monster', emoji: '🦊', name: '盲從狐狸', question: "大家都在討論未來要當工程師，因為賺很多錢。盲從狐狸說：『跟著大家選就對了！』", choices: [{ text: "別人適合的不一定適合我，我要先了解自己的特質和興趣。", correct: true, feedback: "非常正確！了解自己是最重要的。獲得 50 分！" }, { text: "有道理，大家都選的絕對不會錯。", correct: false, feedback: "盲目跟從可能會讓你走上一條不快樂的路。生命值 -1" }] },
+            { type: 'monster', emoji: '🦈', name: '急躁鯊魚', question: "急躁鯊魚對你吼叫：『別人早就知道自己要幹嘛了，你還在慢慢想！隨便挑一個啦！』", choices: [{ text: "急也沒用，生涯探索需要時間，我會按照自己的步調前進。", correct: true, feedback: "很棒的心態！每個人都有自己的時區。獲得 50 分！" }, { text: "被鯊魚嚇到，隨便決定一個看起來不錯的志願。", correct: false, feedback: "倉促的決定容易後悔喔。生命值 -1" }] }
+        ];
+
+        const bossData = { type: 'boss', emoji: '🐉', name: '大迷惘魔王', radius: 60, question: "【最終試煉】魔王咆哮：『未來充滿變數，現在做計畫有什麼用！放棄思考吧！』", choices: [{ text: "未來太可怕，乾脆什麼都不要想了，走一步算一步。", correct: false, feedback: "被迷惘吞噬了...生涯需要彈性，但不是完全不思考。生命值 -1" }, { text: "未來確實會變，但現在的每一個探索，都會成為我應對變化的力量！", correct: true, feedback: "魔王被你的決心擊潰了！生涯規劃是一段持續成長的旅程！" }] };
+
+        // --- 地圖與生態系生成 ---
+        const zones = [
+            { id: 'city', endY: 800, color: '#cbd5e1', pathColor: '#64748b' },   // 頂部 城市 (0~800)
+            { id: 'ocean', endY: 1700, color: '#93c5fd', pathColor: '#fde047' }, // 中上 海洋 (800~1700)
+            { id: 'forest', endY: 2700, color: '#86efac', pathColor: '#854d0e' }, // 中下 森林 (1700~2700)
+            { id: 'village', endY: 3600, color: '#fef08a', pathColor: '#dcedc1' } // 底部 鄉村 (2700~3600)
+        ];
+
+        let entities = [];
+        let decorations = [];
+
+        function initWorld() {
+            entities = []; decorations = []; particles = [];
+            
+            // 生成豐富裝飾物
+            for(let i=0; i<500; i++) {
+                let x = Math.random() * worldWidth;
+                let y = Math.random() * worldHeight;
+                let zone = zones.find(z => y < z.endY).id;
+                let type, size;
+
+                if(zone === 'city') {
+                    type = Math.random() > 0.6 ? 'building' : 'streetlamp';
+                    size = Math.random() * 20 + 30;
+                } else if(zone === 'ocean') {
+                    type = Math.random() > 0.5 ? 'wave' : (Math.random() > 0.5 ? 'island' : 'boat');
+                    size = Math.random() * 15 + 10;
+                } else if(zone === 'forest') {
+                    type = Math.random() > 0.4 ? 'pine' : 'bush';
+                    size = Math.random() * 20 + 20;
+                } else { // village
+                    type = Math.random() > 0.7 ? 'house' : (Math.random() > 0.4 ? 'crop' : 'flower');
+                    size = Math.random() * 10 + 15;
+                }
+                
+                // 避開中間主幹道
+                if (x > worldWidth/2 - 150 && x < worldWidth/2 + 150) {
+                    if(Math.random() > 0.2) x += (Math.random() > 0.5 ? 200 : -200);
+                }
+                decorations.push({ x, y, type, size, zone });
+            }
+
+            // 排序裝飾物 (Y軸)，讓下方的畫在上面
+            decorations.sort((a,b) => a.y - b.y);
+
+            // 生成志願球
+            for(let i=0; i<40; i++) {
+                entities.push({ type: 'orb', x: Math.random() * (worldWidth - 200) + 100, y: Math.random() * (worldHeight - 500) + 300, radius: 12, active: true });
+            }
+
+            // 生成怪物分佈在各區
+            const pathSegments = monstersData.length;
+            const yStep = (worldHeight - 800) / pathSegments;
+            monstersData.forEach((data, index) => {
+                entities.push({ ...data, x: worldWidth / 2 + (Math.random() * 300 - 150), y: worldHeight - 500 - (index * yStep), radius: 30, active: true });
+            });
+
+            // 大魔王 (城市頂端)
+            entities.push({ ...bossData, x: worldWidth / 2, y: 150, active: true });
+
+            player.x = worldWidth / 2; player.y = worldHeight - 200;
+            player.hp = 3; player.score = 0; player.orbs = 0;
+            updateUI();
+        }
+
+        // 輸入處理
+        window.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = true; });
+        window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+        const setupDpad = (id, keyName) => {
+            const btn = document.getElementById(id);
+            const on = (e) => { e.preventDefault(); keys[keyName] = true; };
+            const off = (e) => { e.preventDefault(); keys[keyName] = false; };
+            btn.addEventListener('touchstart', on); btn.addEventListener('touchend', off);
+            btn.addEventListener('mousedown', on); btn.addEventListener('mouseup', off); btn.addEventListener('mouseleave', off);
+        };
+        setupDpad('up', 'ArrowUp'); setupDpad('down', 'ArrowDown'); setupDpad('left', 'ArrowLeft'); setupDpad('right', 'ArrowRight');
+
+        // --- 繪圖函數 ---
+        function drawBackground() {
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            // 繪製自訂底圖 (取代原本的區域色塊與路徑)
+            if (bgImage.complete && bgImage.naturalWidth !== 0) {
+                ctx.drawImage(bgImage, 0, 0, worldWidth, worldHeight);
+            } else {
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, worldWidth, worldHeight);
+            }
+
+            // 繪製精緻裝飾物
+            decorations.forEach(d => {
+                // 剔除畫面外的裝飾物以優化效能
+                if (d.x - camera.x < -100 || d.x - camera.x > canvas.width + 100 || 
+                    d.y - camera.y < -100 || d.y - camera.y > canvas.height + 100) return;
+
+                ctx.save();
+                ctx.translate(d.x, d.y);
+                
+                if (d.type === 'pine') {
+                    ctx.fillStyle = '#166534'; // 深綠
+                    ctx.beginPath(); ctx.moveTo(0, -d.size*2); ctx.lineTo(-d.size, 0); ctx.lineTo(d.size, 0); ctx.fill();
+                    ctx.fillStyle = '#14532d';
+                    ctx.beginPath(); ctx.moveTo(0, -d.size*1.5); ctx.lineTo(-d.size*0.8, d.size*0.5); ctx.lineTo(d.size*0.8, d.size*0.5); ctx.fill();
+                    ctx.fillStyle = '#451a03'; ctx.fillRect(-d.size*0.2, d.size*0.5, d.size*0.4, d.size*0.8);
+                } else if (d.type === 'bush') {
+                    ctx.fillStyle = '#22c55e';
+                    ctx.beginPath(); ctx.arc(0, 0, d.size, 0, Math.PI*2); ctx.arc(-d.size*0.5, -d.size*0.5, d.size*0.8, 0, Math.PI*2); ctx.arc(d.size*0.5, -d.size*0.3, d.size*0.9, 0, Math.PI*2); ctx.fill();
+                } else if (d.type === 'building') {
+                    ctx.fillStyle = '#94a3b8'; ctx.fillRect(-d.size, -d.size*3, d.size*2, d.size*3);
+                    ctx.fillStyle = '#e2e8f0'; // windows
+                    for(let wy=-d.size*2.5; wy<0; wy+=d.size*0.6) {
+                        ctx.fillRect(-d.size*0.6, wy, d.size*0.4, d.size*0.4);
+                        ctx.fillRect(d.size*0.2, wy, d.size*0.4, d.size*0.4);
+                    }
+                } else if (d.type === 'wave') {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.arc(0, 0, d.size, Math.PI, Math.PI*2); ctx.stroke();
+                } else if (d.type === 'island') {
+                    ctx.fillStyle = '#fde047'; ctx.beginPath(); ctx.ellipse(0, 0, d.size*2, d.size, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#15803d'; ctx.beginPath(); ctx.arc(0, -d.size*0.5, d.size*0.8, 0, Math.PI*2); ctx.fill();
+                } else if (d.type === 'house') {
+                    ctx.fillStyle = '#fcd34d'; ctx.fillRect(-d.size, -d.size, d.size*2, d.size);
+                    ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.moveTo(0, -d.size*2); ctx.lineTo(-d.size*1.2, -d.size); ctx.lineTo(d.size*1.2, -d.size); ctx.fill();
+                } else if (d.type === 'crop') {
+                    ctx.fillStyle = '#854d0e'; ctx.fillRect(-d.size, 0, d.size*2, d.size*0.3);
+                    ctx.fillStyle = '#84cc16'; ctx.beginPath(); ctx.arc(0, -d.size*0.2, d.size*0.4, 0, Math.PI*2); ctx.fill();
+                } else if (d.type === 'flower') {
+                    ctx.fillStyle = '#f472b6'; ctx.beginPath(); ctx.arc(0, -d.size, d.size, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(0, -d.size, d.size*0.4, 0, Math.PI*2); ctx.fill();
+                }
+                ctx.restore();
+            });
+
+            // 終點祭壇 (大魔王所在)
+            ctx.fillStyle = '#fca5a5';
+            ctx.beginPath(); ctx.arc(worldWidth/2, 150, 120, 0, Math.PI*2); ctx.fill();
+            ctx.lineWidth = 10; ctx.strokeStyle = 'white'; ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawEntities() {
+            entities.forEach(ent => {
+                if (!ent.active) return;
+                const screenX = ent.x - camera.x; const screenY = ent.y - camera.y;
+                if (screenX < -100 || screenX > canvas.width + 100 || screenY < -100 || screenY > canvas.height + 100) return;
+
+                if (ent.type === 'orb') {
+                    ctx.save();
+                    ctx.translate(screenX, screenY + Math.sin(Date.now()/300 + ent.x)*4); // 浮動
+                    ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(0, 0, ent.radius, Math.PI, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, ent.radius, 0, Math.PI); ctx.fill();
+                    ctx.lineWidth = 2; ctx.strokeStyle = '#1e293b'; ctx.beginPath(); ctx.arc(0, 0, ent.radius, 0, Math.PI*2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-ent.radius, 0); ctx.lineTo(ent.radius, 0); ctx.stroke();
+                    ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(0, 0, ent.radius*0.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                    ctx.restore();
+                } else if (ent.type === 'monster' || ent.type === 'boss') {
+                    ctx.save();
+                    ctx.translate(screenX, screenY + Math.sin(Date.now()/200 + ent.x)*6);
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(0, ent.radius*0.8, ent.radius, ent.radius/2, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.font = `${ent.radius * 1.5}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ent.emoji, 0, 0);
+                    ctx.font = 'bold 14px Noto Sans TC, sans-serif'; ctx.fillStyle = 'white'; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 3;
+                    ctx.strokeText(ent.name, 0, -ent.radius - 10); ctx.fillText(ent.name, 0, -ent.radius - 10);
+                    ctx.restore();
+                }
+            });
+        }
+
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x - camera.x, player.y - camera.y);
+            
+            // 影子
+            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 18, player.radius, player.radius/2, 0, 0, Math.PI * 2); ctx.fill();
+
+            // 走路搖晃效果
+            const isMoving = player.vx !== 0 || player.vy !== 0;
+            const wobble = isMoving ? Math.sin(Date.now() / 100) * 5 : 0;
+            ctx.rotate(wobble * Math.PI / 180);
+
+            // 身體
+            ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(0, 0, player.radius, 0, Math.PI * 2); ctx.fill();
+            ctx.lineWidth = 3; ctx.strokeStyle = '#1e3a8a'; ctx.stroke();
+
+            // 眼睛 (依據面向)
+            const eyeOffset = player.facing * 4;
+            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(-5 + eyeOffset, -5, 6, 0, Math.PI*2); ctx.arc(7 + eyeOffset, -5, 6, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(-5 + eyeOffset + player.facing*2, -5, 2.5, 0, Math.PI*2); ctx.arc(7 + eyeOffset + player.facing*2, -5, 2.5, 0, Math.PI*2); ctx.fill();
+
+            // 背包
+            ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.roundRect(-12, -10, 24, 18, 4); ctx.fill(); ctx.lineWidth=2; ctx.stroke();
+
+            ctx.restore();
+        }
+
+        let particles = [];
+        function createParticles(x, y, color, type='burst') {
+            for(let i=0; i < (type==='dust'? 2 : 15); i++){
+                particles.push({
+                    x: x, y: y,
+                    vx: type==='dust' ? (Math.random()-0.5)*2 : (Math.random() - 0.5) * 12,
+                    vy: type==='dust' ? Math.random()*-2 : (Math.random() - 0.5) * 12,
+                    life: 1.0, color: color, size: type==='dust'? 3 : 5
+                });
+            }
+        }
+        function updateAndDrawParticles() {
+            ctx.save(); ctx.translate(-camera.x, -camera.y);
+            for(let i = particles.length -1; i >= 0; i--){
+                let p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.04;
+                if(p.life <= 0) { particles.splice(i, 1); continue; }
+                ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // --- 邏輯更新 ---
+        function update() {
+            if (gameState !== 'playing') return;
+
+            player.vx = 0; player.vy = 0;
+            if (keys.ArrowUp || keys.w) player.vy = -player.speed;
+            if (keys.ArrowDown || keys.s) player.vy = player.speed;
+            if (keys.ArrowLeft || keys.a) { player.vx = -player.speed; player.facing = -1; }
+            if (keys.ArrowRight || keys.d) { player.vx = player.speed; player.facing = 1; }
+
+            if (player.vx !== 0 && player.vy !== 0) {
+                const length = Math.sqrt(player.vx*player.vx + player.vy*player.vy);
+                player.vx = (player.vx / length) * player.speed; player.vy = (player.vy / length) * player.speed;
+            }
+
+            player.x += player.vx; player.y += player.vy;
+            player.x = Math.max(player.radius, Math.min(worldWidth - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(worldHeight - player.radius, player.y));
+
+            // 移動灰塵特效
+            if ((player.vx !== 0 || player.vy !== 0) && Math.random() > 0.7) {
+                createParticles(player.x, player.y + 15, 'rgba(0,0,0,0.1)', 'dust');
+            }
+
+            camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
+            checkCollisions();
+        }
+
+        let currentEncounter = null;
+        function checkCollisions() {
+            for (let i = 0; i < entities.length; i++) {
+                const ent = entities[i];
+                if (!ent.active) continue;
+
+                const dist = Math.sqrt((player.x - ent.x)**2 + (player.y - ent.y)**2);
+                if (dist < player.radius + ent.radius) {
+                    if (ent.type === 'orb') {
+                        ent.active = false; player.orbs++; player.score += 10;
+                        updateUI(); sfx.collect(); createParticles(ent.x, ent.y, '#fca5a5');
+                    } else if (ent.type === 'monster' || ent.type === 'boss') {
+                        sfx.hit(); triggerDialogue(ent); break;
+                    }
+                }
+            }
+        }
+
+        // --- UI 與對話 ---
+        const ui = {
+            overlay: document.getElementById('modal-overlay'), title: document.getElementById('modal-title'),
+            text: document.getElementById('modal-text'), char: document.getElementById('modal-character'),
+            options: document.getElementById('modal-options'), contBtn: document.getElementById('modal-continue'),
+            hp: document.getElementById('hp-container'), score: document.getElementById('score-display'), orb: document.getElementById('orb-display')
+        };
+
+        function updateUI() {
+            ui.hp.innerHTML = Array.from({length: player.maxHp}, (_, i) => i < player.hp ? '❤️ ' : '🖤 ').join('');
+            ui.score.innerText = player.score; ui.orb.innerText = `x ${player.orbs}`;
+            if (player.hp <= 0 && gameState !== 'gameover') gameOver(false);
+        }
+
+        function triggerDialogue(entity) {
+            gameState = 'dialogue'; currentEncounter = entity; player.y += 15; // 退後防連撞
+            
+            ui.title.innerText = `遭遇 ${entity.name}！`; ui.title.className = entity.type === 'boss' ? 'text-3xl font-black text-red-600 mb-2' : 'text-2xl font-black text-gray-800 mb-2';
+            ui.text.innerText = entity.question; ui.char.innerText = entity.emoji;
+            ui.options.innerHTML = ''; ui.contBtn.classList.add('hidden'); ui.options.classList.remove('hidden');
+
+            [...entity.choices].sort(() => Math.random() - 0.5).forEach((choice, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'w-full bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold py-3 px-4 rounded-xl transition-all border-2 border-blue-200 text-left';
+                btn.innerText = `${String.fromCharCode(65 + index)}. ${choice.text}`;
+                btn.onclick = () => handleAnswer(choice);
+                ui.options.appendChild(btn);
+            });
+            ui.overlay.classList.remove('hidden');
+        }
+
+        function handleAnswer(choice) {
+            ui.options.classList.add('hidden'); ui.text.innerText = choice.feedback; ui.contBtn.classList.remove('hidden');
+            if (choice.correct) {
+                ui.title.innerText = "答對了！✨"; ui.title.className = 'text-2xl font-black text-green-600 mb-2';
+                player.score += 50; currentEncounter.active = false; sfx.correct(); createParticles(currentEncounter.x, currentEncounter.y, '#fbbf24');
+            } else {
+                ui.title.innerText = "哎呀！被誘惑了 💔"; ui.title.className = 'text-2xl font-black text-red-600 mb-2';
+                player.hp -= 1; sfx.wrong(); createParticles(player.x, player.y, '#ef4444');
+            }
+            updateUI();
+        }
+
+        ui.contBtn.onclick = () => {
+            ui.overlay.classList.add('hidden');
+            if (player.hp <= 0) return; // handled by updateUI
+            if (currentEncounter.type === 'boss' && !currentEncounter.active) gameOver(true);
+            else { gameState = 'playing'; currentEncounter = null; }
+        };
+
+        function gameOver(isVictory) {
+            gameState = isVictory ? 'victory' : 'gameover';
+            bgmAudio.pause(); // 結束時暫停背景音樂
+            bgmAudio.currentTime = 0;
+            isVictory ? sfx.win() : sfx.wrong();
+            ui.title.innerText = isVictory ? "🎉 探索成功！" : "💀 探索失敗...";
+            ui.title.className = isVictory ? 'text-4xl font-black text-green-600 mb-2' : 'text-4xl font-black text-red-600 mb-2';
+            ui.char.innerText = isVictory ? '🎓' : '🥀';
+            ui.text.innerText = isVictory ? `太棒了！你成功擊敗了迷惘，踏上了清晰的未來之路！\n\n最終分數：${player.score}\n蒐集志願球：${player.orbs} 顆` : `你在探索的途中迷失了方向...\n不要灰心，生涯規劃本來就需要不斷嘗試！\n\n最終分數：${player.score}`;
+            ui.options.innerHTML = ''; ui.contBtn.innerText = "重新開始探索";
+            ui.contBtn.className = "w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 px-4 rounded-xl mt-4 transition-colors pixel-border text-xl";
+            ui.contBtn.classList.remove('hidden');
+            ui.contBtn.onclick = () => { ui.overlay.classList.add('hidden'); document.getElementById('start-screen').classList.remove('hidden'); gameState = 'start'; };
+            ui.overlay.classList.remove('hidden');
+        }
+
+        // --- 主遊戲迴圈 ---
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (gameState === 'playing' || gameState === 'dialogue') {
+                drawBackground(); drawEntities(); updateAndDrawParticles(); drawPlayer(); update();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- 初始化 ---
+        document.getElementById('start-btn').addEventListener('click', () => {
+            initAudio(); // 初始化音訊並啟動機制 (解決瀏覽器限制)
+            document.getElementById('start-screen').classList.add('hidden');
+            
+            const videoOverlay = document.getElementById('video-overlay');
+            const video = document.getElementById('intro-video');
+            
+            // 顯示影片層
+            videoOverlay.classList.remove('hidden');
+            
+            // 定義開始遊戲的流程
+            const startGame = () => {
+                video.pause();
+                videoOverlay.classList.add('hidden');
+                initWorld(); 
+                gameState = 'playing';
+                if(!isMuted) bgmAudio.play().catch(e => console.log("Audio play blocked", e));
+            };
+
+            video.onended = startGame;
+            document.getElementById('skip-video-btn').onclick = startGame;
+            
+            // 播放影片，如果被瀏覽器阻擋則直接開始遊戲
+            video.play().catch(e => {
+                console.log("影片自動播放失敗", e);
+                startGame(); 
+            });
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
